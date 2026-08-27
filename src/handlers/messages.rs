@@ -191,16 +191,7 @@ pub async fn execute_image(
     let client = get_client(state, session_id)?;
     let to_jid = resolve_recipient_jid(client.clone(), parse_jid(&request.to)?).await;
 
-    let (data, mimetype) = get_media_data(&request.image).await?;
-
-    let upload = client
-        .upload(
-            data.clone(),
-            wacore::download::MediaType::Image,
-            Default::default(),
-        )
-        .await
-        .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+    let media = resolve_media(&client, &request.image, wacore::download::MediaType::Image).await?;
 
     let context_info: MessageField<waproto::whatsapp::ContextInfo> =
         if let Some(ref fake) = request.fake_reply {
@@ -217,13 +208,13 @@ pub async fn execute_image(
 
     let message = waproto::whatsapp::Message {
         image_message: MessageField::some(waproto::whatsapp::message::ImageMessage {
-            url: Some(upload.url),
-            direct_path: Some(upload.direct_path),
-            media_key: Some(upload.media_key.to_vec()),
-            file_sha256: Some(upload.file_sha256.to_vec()),
-            file_enc_sha256: Some(upload.file_enc_sha256.to_vec()),
-            file_length: Some(data.len() as u64),
-            mimetype: Some(mimetype),
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
             caption: request.caption,
             context_info,
             ..Default::default()
@@ -295,16 +286,7 @@ pub async fn execute_video(
     let client = get_client(state, session_id)?;
     let to_jid = resolve_recipient_jid(client.clone(), parse_jid(&request.to)?).await;
 
-    let (data, mimetype) = get_media_data(&request.video).await?;
-
-    let upload = client
-        .upload(
-            data.clone(),
-            wacore::download::MediaType::Video,
-            Default::default(),
-        )
-        .await
-        .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+    let media = resolve_media(&client, &request.video, wacore::download::MediaType::Video).await?;
 
     let context_info: MessageField<waproto::whatsapp::ContextInfo> =
         if let Some(ref fake) = request.fake_reply {
@@ -321,13 +303,13 @@ pub async fn execute_video(
 
     let message = waproto::whatsapp::Message {
         video_message: MessageField::some(waproto::whatsapp::message::VideoMessage {
-            url: Some(upload.url),
-            direct_path: Some(upload.direct_path),
-            media_key: Some(upload.media_key.to_vec()),
-            file_sha256: Some(upload.file_sha256.to_vec()),
-            file_enc_sha256: Some(upload.file_enc_sha256.to_vec()),
-            file_length: Some(data.len() as u64),
-            mimetype: Some(mimetype),
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
             caption: request.caption,
             context_info,
             ..Default::default()
@@ -399,26 +381,17 @@ pub async fn execute_audio(
     let client = get_client(state, session_id)?;
     let to_jid = resolve_recipient_jid(client.clone(), parse_jid(&request.to)?).await;
 
-    let (data, mimetype) = get_media_data(&request.audio).await?;
-
-    let upload = client
-        .upload(
-            data.clone(),
-            wacore::download::MediaType::Audio,
-            Default::default(),
-        )
-        .await
-        .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+    let media = resolve_media(&client, &request.audio, wacore::download::MediaType::Audio).await?;
 
     let message = waproto::whatsapp::Message {
         audio_message: MessageField::some(waproto::whatsapp::message::AudioMessage {
-            url: Some(upload.url),
-            direct_path: Some(upload.direct_path),
-            media_key: Some(upload.media_key.to_vec()),
-            file_sha256: Some(upload.file_sha256.to_vec()),
-            file_enc_sha256: Some(upload.file_enc_sha256.to_vec()),
-            file_length: Some(data.len() as u64),
-            mimetype: Some(mimetype),
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
             ptt: Some(request.ptt),
             ..Default::default()
         }),
@@ -489,16 +462,12 @@ pub async fn execute_document(
     let client = get_client(state, session_id)?;
     let to_jid = resolve_recipient_jid(client.clone(), parse_jid(&request.to)?).await;
 
-    let (data, mimetype) = get_media_data(&request.document).await?;
-
-    let upload = client
-        .upload(
-            data.clone(),
-            wacore::download::MediaType::Document,
-            Default::default(),
-        )
-        .await
-        .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+    let media = resolve_media(
+        &client,
+        &request.document,
+        wacore::download::MediaType::Document,
+    )
+    .await?;
 
     let context_info: MessageField<waproto::whatsapp::ContextInfo> =
         if let Some(ref fake) = request.fake_reply {
@@ -515,13 +484,13 @@ pub async fn execute_document(
 
     let message = waproto::whatsapp::Message {
         document_message: MessageField::some(waproto::whatsapp::message::DocumentMessage {
-            url: Some(upload.url),
-            direct_path: Some(upload.direct_path),
-            media_key: Some(upload.media_key.to_vec()),
-            file_sha256: Some(upload.file_sha256.to_vec()),
-            file_enc_sha256: Some(upload.file_enc_sha256.to_vec()),
-            file_length: Some(data.len() as u64),
-            mimetype: Some(mimetype),
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
             file_name: Some(request.filename),
             caption: request.caption,
             context_info,
@@ -594,25 +563,21 @@ pub async fn execute_sticker(
     let client = get_client(state, session_id)?;
     let to_jid = resolve_recipient_jid(client.clone(), parse_jid(&request.to)?).await;
 
-    let (data, _mimetype) = get_media_data(&request.sticker).await?;
-
-    let upload = client
-        .upload(
-            data.clone(),
-            wacore::download::MediaType::Sticker,
-            Default::default(),
-        )
-        .await
-        .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+    let media = resolve_media(
+        &client,
+        &request.sticker,
+        wacore::download::MediaType::Sticker,
+    )
+    .await?;
 
     let message = waproto::whatsapp::Message {
         sticker_message: MessageField::some(waproto::whatsapp::message::StickerMessage {
-            url: Some(upload.url),
-            direct_path: Some(upload.direct_path),
-            media_key: Some(upload.media_key.to_vec()),
-            file_sha256: Some(upload.file_sha256.to_vec()),
-            file_enc_sha256: Some(upload.file_enc_sha256.to_vec()),
-            file_length: Some(data.len() as u64),
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
             mimetype: Some("image/webp".to_string()),
             ..Default::default()
         }),
@@ -1393,23 +1358,15 @@ pub async fn execute_cta_url(
     };
 
     let header_media = if let Some(ref media_ref) = request.image {
-        let (data, mimetype) = get_media_data(media_ref).await?;
-        let upload = client
-            .upload(
-                data.clone(),
-                wacore::download::MediaType::Image,
-                Default::default(),
-            )
-            .await
-            .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+        let media = resolve_media(&client, media_ref, wacore::download::MediaType::Image).await?;
         Some(waproto::whatsapp::message::ImageMessage {
-            url: Some(upload.url),
-            direct_path: Some(upload.direct_path),
-            media_key: Some(upload.media_key.to_vec()),
-            file_sha256: Some(upload.file_sha256.to_vec()),
-            file_enc_sha256: Some(upload.file_enc_sha256.to_vec()),
-            file_length: Some(data.len() as u64),
-            mimetype: Some(mimetype),
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
             ..Default::default()
         })
     } else {
@@ -3498,6 +3455,82 @@ async fn do_get_user_info_lite(
     AssertSend(async move { client.contacts().get_user_info(&jids).await.map_err(|_| ()) }).await
 }
 
+/// One media payload resolved to exactly the fields a `*Message` proto
+/// needs, whichever way the caller supplied it.
+pub(crate) struct ResolvedMedia {
+    pub url: String,
+    pub direct_path: String,
+    pub media_key: Vec<u8>,
+    pub file_sha256: Vec<u8>,
+    pub file_enc_sha256: Vec<u8>,
+    pub file_length: u64,
+    pub mimetype: String,
+}
+
+fn decode_descriptor_field(name: &str, value: &str) -> Result<Vec<u8>, ApiError> {
+    base64::engine::general_purpose::STANDARD
+        .decode(value)
+        .map_err(|e| ApiError::BadRequest(format!("invalid base64 in {name}: {e}")))
+}
+
+/// Resolves a `MediaData` for the send path, uploading only when there is
+/// something to upload.
+///
+/// `Uploaded` is passed straight through -- that is the entire point of
+/// `POST /sessions/{id}/media/upload`: the bytes are already on WhatsApp's
+/// media servers, encrypted under `media_key`, so the descriptor is exactly
+/// what the outgoing proto needs. Re-fetching that url would hand us the
+/// ciphertext, and re-uploading it would produce a second blob under a
+/// different key. The three base64 fields are decoded here because
+/// `handlers::media::upload_media` base64-ENCODES them on the way out; the
+/// two halves have to stay symmetric.
+///
+/// Every other variant keeps the pre-existing behaviour verbatim:
+/// `get_media_data` (fetch a public url, or decode inline base64) followed
+/// by `client.upload`.
+pub(crate) async fn resolve_media(
+    client: &std::sync::Arc<whatsapp_rust::Client>,
+    media: &MediaData,
+    media_type: wacore::download::MediaType,
+) -> Result<ResolvedMedia, ApiError> {
+    if let MediaData::Uploaded {
+        url,
+        direct_path,
+        media_key,
+        file_sha256,
+        file_enc_sha256,
+        file_length,
+        mimetype,
+    } = media
+    {
+        return Ok(ResolvedMedia {
+            url: url.clone(),
+            direct_path: direct_path.clone(),
+            media_key: decode_descriptor_field("media_key", media_key)?,
+            file_sha256: decode_descriptor_field("file_sha256", file_sha256)?,
+            file_enc_sha256: decode_descriptor_field("file_enc_sha256", file_enc_sha256)?,
+            file_length: *file_length,
+            mimetype: mimetype.clone(),
+        });
+    }
+
+    let (data, mimetype) = get_media_data(media).await?;
+    let upload = client
+        .upload(data.clone(), media_type, Default::default())
+        .await
+        .map_err(|e| ApiError::MediaUploadFailed(e.to_string()))?;
+
+    Ok(ResolvedMedia {
+        url: upload.url,
+        direct_path: upload.direct_path,
+        media_key: upload.media_key.to_vec(),
+        file_sha256: upload.file_sha256.to_vec(),
+        file_enc_sha256: upload.file_enc_sha256.to_vec(),
+        file_length: data.len() as u64,
+        mimetype,
+    })
+}
+
 pub(crate) async fn get_media_data(media: &MediaData) -> Result<(Vec<u8>, String), ApiError> {
     match media {
         MediaData::Url { url } => {
@@ -3532,8 +3565,13 @@ pub(crate) async fn get_media_data(media: &MediaData) -> Result<(Vec<u8>, String
                 .map_err(|e| ApiError::BadRequest(format!("Invalid base64: {}", e)))?;
             Ok((decoded, mimetype.clone()))
         }
-        MediaData::Uploaded { mimetype: _, .. } => Err(ApiError::BadRequest(
-            "Pre-uploaded media not supported in this context".to_string(),
+        // Unreachable in practice: resolve_media short-circuits this variant
+        // before ever calling here, precisely so an already-uploaded payload
+        // is passed through instead of being re-fetched. Fetching it would
+        // download the ENCRYPTED blob (the descriptor's url is the ciphertext
+        // on mmg.whatsapp.net) and send an undecryptable message.
+        MediaData::Uploaded { .. } => Err(ApiError::Internal(
+            "pre-uploaded media must be resolved by resolve_media".to_string(),
         )),
     }
 }
