@@ -14,9 +14,17 @@ RUN apt-get update && apt-get install -y \
 
 ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 
-RUN rustup default nightly
-
-COPY Cargo.toml Cargo.lock* ./
+# rust-toolchain.toml is copied WITH the manifests, and there is deliberately
+# no `rustup default nightly` above it. That line used to be here, and it
+# silently defeated the pin: rust-toolchain.toml lives in the repo root but
+# was never copied into the build context, so inside the image it did not
+# exist and cargo fell back to whatever nightly was current on build day.
+# On a nightly channel that means an image build could fail on a compiler or
+# dependency change unrelated to anything in src/ -- indistinguishable, from
+# the error output, from a real bug in this repo. Copying the pin makes a
+# green `cargo build --release` on a developer's machine actually predict a
+# green image build, because both resolve the same dated toolchain.
+COPY Cargo.toml Cargo.lock* rust-toolchain.toml ./
 
 RUN mkdir -p src && \
     echo 'fn main() { println!("dummy"); }' > src/main.rs

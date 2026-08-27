@@ -261,19 +261,28 @@ pub struct SendReactionRequest {
     pub emoji: String,
 }
 
+/// How a media payload is supplied on a send request.
+///
+/// The declaration order below is LOAD-BEARING. `#[serde(untagged)]` tries
+/// variants in declaration order, and a struct variant ignores unknown
+/// fields unless it opts out, so the first variant whose required fields
+/// are all present wins.
+///
+/// `Uploaded` therefore has to come first: it is the only variant that
+/// requires all seven fields, so a plain `{"url": ...}` body still falls
+/// through to `Url` and a `{"data", "mimetype"}` body still falls through
+/// to `Base64`. With `Url` declared first -- the order this enum shipped
+/// with through 0.12.2 -- a full descriptor matched `Url` instead, the six
+/// other fields were silently dropped, and the send path then FETCHED the
+/// descriptor's mmg.whatsapp.net URL. That URL serves the ENCRYPTED blob
+/// and passes the SSRF guard, so the recipient received an undecryptable
+/// file while the API answered 200 with a message id. Reordering is what
+/// makes `Uploaded` reachable at all; see `handlers::messages::resolve_media`
+/// for the half that then honours it.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(untagged)]
 #[allow(dead_code)]
 pub enum MediaData {
-    Url {
-        url: String,
-    },
-
-    Base64 {
-        data: String,
-        mimetype: String,
-    },
-
     Uploaded {
         url: String,
         direct_path: String,
@@ -281,6 +290,15 @@ pub enum MediaData {
         file_sha256: String,
         file_enc_sha256: String,
         file_length: u64,
+        mimetype: String,
+    },
+
+    Url {
+        url: String,
+    },
+
+    Base64 {
+        data: String,
         mimetype: String,
     },
 }
