@@ -401,6 +401,58 @@ impl SessionState {
         }
     }
 
+    /// Is `client` the Arc currently installed in this session's slot?
+    ///
+    /// Compares by allocation (`Arc::ptr_eq`), so every clone handed out by
+    /// `Bot::client()` and by the `on_event` callback answers `true` for the
+    /// bot that owns the slot, and `false` for any other bot.
+    ///
+    /// This exists because a `Bot`'s run-loop and the HTTP handlers are
+    /// separate tasks with no ordering between them. `disconnect_session`
+    /// asks a client to stop and returns immediately; the bot's
+    /// `bot.run().await` unwinds some indeterminate time later, possibly
+    /// AFTER a subsequent `connect_session` has already built and installed
+    /// a replacement. A lifecycle write that does not first ask "is this
+    /// still my slot?" therefore acts on someone else's client.
+    pub fn is_current_client(&self, client: &Arc<Client>) -> bool {
+        match self.client.read().as_ref() {
+            Some(c) => Arc::ptr_eq(c, client),
+            None => false,
+        }
+    }
+
+    /// Clear the slot only if `client` is still the installed one; returns
+    /// whether it actually cleared.
+    ///
+    /// The unconditional [`Self::set_client(None)`] this replaces at every
+    /// run-loop teardown caused a permanent, silent wedge in production
+    /// (2026-09-08): an operator disconnected a session and reconnected it
+    /// one second later, the OLD bot's `run()` unwound just after the NEW
+    /// bot had installed itself, and its teardown emptied the slot. The
+    /// session was then client-less forever — `is_alive()` false while the
+    /// cached status stayed `LoggedIn`, which `/status` renders as
+    /// `status: "connecting", is_logged_in: true, socket_alive: false,
+    /// reachability: null`. Every further `connect` built another bot that
+    /// connected happily (logging `Session …: Connected`) and was evicted by
+    /// its predecessor in turn, so the wedge survived any number of
+    /// reconnect attempts and only a process restart cleared it.
+    pub fn clear_client_if(&self, client: &Arc<Client>) -> bool {
+        // One lock at a time, like set_client: never hold the client slot
+        // while taking the lease/chat-store slots.
+        {
+            let mut slot = self.client.write();
+            match slot.as_ref() {
+                Some(c) if Arc::ptr_eq(c, client) => {}
+                _ => return false,
+            }
+            *slot = None;
+        }
+        *self.enc_decrypt_failed_lease.write() = None;
+        *self.chat_store.write() = None;
+        *self.chat_store_subscription.write() = None;
+        true
+    }
+
     pub fn set_client(&self, client: Option<Arc<Client>>) {
         if client.is_none() {
             *self.enc_decrypt_failed_lease.write() = None;

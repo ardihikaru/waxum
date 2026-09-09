@@ -1448,8 +1448,12 @@ async fn connect_client(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Held for the whole function so the teardown after `bot.run()` can ask
+    // whether the session's slot still holds THIS bot's client.
+    let own_client = bot.client();
+
     if let Some(runtime) = state.get_session(session_id) {
-        let c = bot.client();
+        let c = own_client.clone();
         c.enable_auto_reconnect.store(
             runtime.auto_reconnect_enabled(),
             std::sync::atomic::Ordering::Relaxed,
@@ -1476,17 +1480,40 @@ async fn connect_client(
 
     bot.run().await;
 
-    if let Some(runtime) = state.get_session(session_id) {
-        runtime.set_status(SessionStatus::Disconnected);
-        runtime.set_client(None);
+    // Tear down only what this bot still owns. `connect_session` may have
+    // installed a REPLACEMENT bot while this one was unwinding — an
+    // unconditional `set_client(None)` here evicts that replacement and
+    // leaves the session client-less for good; see `clear_client_if`.
+    if !teardown_if_current(state, session_id, &own_client).await {
+        tracing::debug!(
+            session_id = %session_id,
+            "run loop exited for a superseded client; leaving the current one installed"
+        );
+    }
+
+    Ok(())
+}
+
+/// Common teardown for a bot whose `run()` has returned: mark the session
+/// disconnected ONLY if `client` is still the installed one. Returns whether
+/// it was.
+async fn teardown_if_current(
+    state: &AppState,
+    session_id: &str,
+    client: &std::sync::Arc<whatsapp_rust::Client>,
+) -> bool {
+    match state.get_session(session_id) {
+        Some(runtime) if runtime.clear_client_if(client) => {
+            runtime.set_status(SessionStatus::Disconnected);
+        }
+        _ => return false,
     }
 
     let _ = state
         .session_manager()
         .update_session_status(session_id, SessionStatus::Disconnected, false)
         .await;
-
-    Ok(())
+    true
 }
 
 async fn connect_client_with_pair_code(
@@ -1557,8 +1584,12 @@ async fn connect_client_with_pair_code(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Held for the whole function so the teardown after `bot.run()` can ask
+    // whether the session's slot still holds THIS bot's client.
+    let own_client = bot.client();
+
     if let Some(runtime) = state.get_session(session_id) {
-        let c = bot.client();
+        let c = own_client.clone();
         c.enable_auto_reconnect.store(
             runtime.auto_reconnect_enabled(),
             std::sync::atomic::Ordering::Relaxed,
@@ -1579,15 +1610,13 @@ async fn connect_client_with_pair_code(
 
     bot.run().await;
 
-    if let Some(runtime) = state.get_session(session_id) {
-        runtime.set_status(SessionStatus::Disconnected);
-        runtime.set_client(None);
+    // Same ownership check as connect_client above.
+    if !teardown_if_current(state, session_id, &own_client).await {
+        tracing::debug!(
+            session_id = %session_id,
+            "pair-code run loop exited for a superseded client; leaving the current one installed"
+        );
     }
-
-    let _ = state
-        .session_manager()
-        .update_session_status(session_id, SessionStatus::Disconnected, false)
-        .await;
 
     Ok(())
 }
@@ -1604,6 +1633,22 @@ async fn handle_event(
         Some(r) => r,
         None => return,
     };
+
+    // Only the bot that currently owns this session's client slot may write
+    // session state. A superseded bot keeps running until its `run()`
+    // unwinds — and with auto-reconnect on, it keeps connecting and firing
+    // events the whole time. Letting those through is how a session ends up
+    // reporting `status: connecting, is_logged_in: true, socket_alive:
+    // false, reachability: null`: a stale `Connected` caches `LoggedIn`
+    // against a slot that holds someone else's client (or none), while a
+    // stale `LoggedOut`/`Disconnected` would tear the live client down.
+    if !runtime.is_current_client(&client) {
+        tracing::debug!(
+            session_id = %session_id,
+            "ignoring event from a superseded client"
+        );
+        return;
+    }
 
     match event.as_ref() {
         Event::PairingQrCode(wacore::types::events::PairingQrCode { code, .. }) => {
