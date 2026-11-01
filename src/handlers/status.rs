@@ -8,7 +8,8 @@ use waproto::whatsapp as wa;
 
 use crate::error::ApiError;
 use crate::models::common::SuccessResponse;
-use crate::models::status::StatusReactionRequest;
+use crate::models::messages::MessageResponse;
+use crate::models::status::{StatusMediaRequest, StatusReactionRequest, StatusTextRequest};
 use crate::state::AppState;
 
 #[utoipa::path(
@@ -74,4 +75,156 @@ fn get_client(
         .ok_or(ApiError::NotConnected)?;
 
     runtime.get_live_client().ok_or(ApiError::NotConnected)
+}
+
+fn parse_recipients(raw: &[String]) -> Result<Vec<Jid>, ApiError> {
+    if raw.is_empty() {
+        return Err(ApiError::BadRequest(
+            "recipients must contain at least one JID".to_string(),
+        ));
+    }
+    raw.iter()
+        .map(|r| r.parse().map_err(|_| ApiError::InvalidJid(r.clone())))
+        .collect()
+}
+
+fn status_response(message_id: String) -> Json<MessageResponse> {
+    Json(MessageResponse {
+        message_id,
+        timestamp: chrono::Utc::now().timestamp(),
+        to: Jid::status_broadcast().to_string(),
+    })
+}
+
+#[utoipa::path(
+    post,
+    security(("bearer_auth" = [])),
+    path = "/api/v1/sessions/{session_id}/status/text",
+    tag = "status",
+    params(("session_id" = String, Path, description = "Session ID")),
+    request_body = StatusTextRequest,
+    responses(
+        (status = 200, description = "Status posted", body = MessageResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 404, description = "Session not found"),
+        (status = 503, description = "Not connected")
+    )
+)]
+pub async fn post_status_text(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<StatusTextRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    let client = get_client(&state, &session_id)?;
+    let recipients = parse_recipients(&request.recipients)?;
+    let result = client
+        .status()
+        .send_text(
+            &request.text,
+            request.background_argb.unwrap_or(0xFF1E6E4F),
+            wa::message::extended_text_message::FontType::SYSTEM,
+            &recipients,
+            Default::default(),
+        )
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(status_response(result.message_id))
+}
+
+#[utoipa::path(
+    post,
+    security(("bearer_auth" = [])),
+    path = "/api/v1/sessions/{session_id}/status/image",
+    tag = "status",
+    params(("session_id" = String, Path, description = "Session ID")),
+    request_body = StatusMediaRequest,
+    responses(
+        (status = 200, description = "Status posted", body = MessageResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 404, description = "Session not found"),
+        (status = 503, description = "Not connected")
+    )
+)]
+pub async fn post_status_image(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<StatusMediaRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    let client = get_client(&state, &session_id)?;
+    let recipients = parse_recipients(&request.recipients)?;
+    let media = crate::handlers::messages::resolve_media(
+        &client,
+        &request.media,
+        wacore::download::MediaType::Image,
+    )
+    .await?;
+    let message = wa::Message {
+        image_message: MessageField::some(wa::message::ImageMessage {
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
+            caption: request.caption,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let result = client
+        .status()
+        .send_raw(message, &recipients, Default::default())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(status_response(result.message_id))
+}
+
+#[utoipa::path(
+    post,
+    security(("bearer_auth" = [])),
+    path = "/api/v1/sessions/{session_id}/status/video",
+    tag = "status",
+    params(("session_id" = String, Path, description = "Session ID")),
+    request_body = StatusMediaRequest,
+    responses(
+        (status = 200, description = "Status posted", body = MessageResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 404, description = "Session not found"),
+        (status = 503, description = "Not connected")
+    )
+)]
+pub async fn post_status_video(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<StatusMediaRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    let client = get_client(&state, &session_id)?;
+    let recipients = parse_recipients(&request.recipients)?;
+    let media = crate::handlers::messages::resolve_media(
+        &client,
+        &request.media,
+        wacore::download::MediaType::Video,
+    )
+    .await?;
+    let message = wa::Message {
+        video_message: MessageField::some(wa::message::VideoMessage {
+            url: Some(media.url),
+            direct_path: Some(media.direct_path),
+            media_key: Some(media.media_key),
+            file_sha256: Some(media.file_sha256),
+            file_enc_sha256: Some(media.file_enc_sha256),
+            file_length: Some(media.file_length),
+            mimetype: Some(media.mimetype),
+            caption: request.caption,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let result = client
+        .status()
+        .send_raw(message, &recipients, Default::default())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(status_response(result.message_id))
 }
