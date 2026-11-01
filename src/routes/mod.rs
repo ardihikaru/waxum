@@ -403,6 +403,18 @@ fn session_routes() -> Router<AppState> {
             post(handlers::status::send_status_reaction),
         )
         .route(
+            "/{session_id}/status/text",
+            post(handlers::status::post_status_text),
+        )
+        .route(
+            "/{session_id}/status/image",
+            post(handlers::status::post_status_image),
+        )
+        .route(
+            "/{session_id}/status/video",
+            post(handlers::status::post_status_video),
+        )
+        .route(
             "/{session_id}/blocking/list",
             get(handlers::blocking::get_blocklist),
         )

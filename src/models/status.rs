@@ -10,3 +10,25 @@ pub struct StatusReactionRequest {
     #[schema(example = "\u{1F49A}")]
     pub reaction: String,
 }
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct StatusTextRequest {
+    #[schema(example = "Hello from my status!")]
+    pub text: String,
+    /// Background colour as 0xAARRGGBB (decimal). Defaults to 0xFF1E6E4F.
+    #[schema(example = 4280184399u32)]
+    pub background_argb: Option<u32>,
+    /// JIDs allowed to see the status.
+    #[schema(example = json!(["559999999999@s.whatsapp.net"]))]
+    pub recipients: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct StatusMediaRequest {
+    /// Image or video (same shape as the `/messages/image` / `/messages/video` media field).
+    pub media: crate::models::messages::MediaData,
+    pub caption: Option<String>,
+    /// JIDs allowed to see the status.
+    #[schema(example = json!(["559999999999@s.whatsapp.net"]))]
+    pub recipients: Vec<String>,
+}

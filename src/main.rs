@@ -208,6 +208,9 @@ use state::AppState;
         handlers::calls::transcribe_call,
 
         handlers::status::send_status_reaction,
+        handlers::status::post_status_text,
+        handlers::status::post_status_image,
+        handlers::status::post_status_video,
 
         handlers::media::upload_media,
         handlers::media::download_media,
@@ -408,6 +411,8 @@ use state::AppState;
             models::calls::SetVideoOrientationRequest,
 
             models::status::StatusReactionRequest,
+            models::status::StatusTextRequest,
+            models::status::StatusMediaRequest,
 
             models::media::UploadMediaResponse,
             models::media::MediaType,
